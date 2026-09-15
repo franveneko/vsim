@@ -675,9 +675,6 @@ class MineSim:
     # -------------------------------------------------------------- milestones
     def _update_milestones(self) -> np.ndarray:
         inv, I = self.inv, ITEM_IX
-        S = self.SIZE
-        rows = np.arange(self.n)
-        g = self.grid[self.dim, rows]
         has_bench = (self.grid[OVERWORLD] == BENCH).reshape(self.n, -1).any(axis=1)
         has_portal = (self.grid[OVERWORLD] == PORTAL).reshape(self.n, -1).any(axis=1)
         reached = np.stack([

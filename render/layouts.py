@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image, ImageDraw
 
-from minesim.world import MILESTONES, N_MILESTONES, MineSim
-from render import scene, tiles, ui
+from minesim.world import MineSim
+from render import scene, ui
 
 LANDSCAPE = (1920, 1080)
 PORTRAIT = (1080, 1920)

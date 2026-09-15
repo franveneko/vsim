@@ -12,11 +12,11 @@ from pathlib import Path
 import numpy as np
 
 from minesim.world import MILESTONES, N_MILESTONES
-from render import audio, build, layouts, ui
+from render import audio, ui
 from render import build as build_mod
 from render.build import (FPS, LANDSCAPE, PORTRAIT, card, chart_scene,
                           connectome_frame, hero_scene, population_scene, still_scene)
-from render.video import Subtitles, VideoWriter, mux
+from render.video import Subtitles, VideoWriter
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 

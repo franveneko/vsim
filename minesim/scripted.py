@@ -48,7 +48,7 @@ WOOD_STOCK = 6
 
 
 def act(e: MineSim) -> np.ndarray:
-    n, rows = e.n, np.arange(e.n)
+    rows = np.arange(e.n)
     st = e.stage()
     gx, gy, gd = e._goal_position()
     # detour for wood when a tool is due and there is none left

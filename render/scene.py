@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
-from minesim.world import (ACTION_NAMES, ITEM_IX, MILESTONES, N_MILESTONES,
-                           N_MOBS, MineSim)
+from minesim.world import ITEM_IX, MILESTONES, N_MILESTONES, N_MOBS, MineSim
 from render import tiles, ui
 
 TILE = tiles.TILE
