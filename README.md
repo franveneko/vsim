@@ -128,6 +128,29 @@ render/       textures, scenes, charts, storyboards, audio, ffmpeg
 make_videos.py
 ```
 
+## What actually happened
+
+90 generations, population 192, on a 4-core CPU.
+
+| | |
+|---|---|
+| Simulated core | 17,966 neurons, 329,706 measured connections |
+| Free parameters per fly | 1,009 (plus 11,587 plastic KC→MBON synapses) |
+| Mean milestones, generation 0 → 90 | 0.13 → ~4.8 |
+| Best full run, over 1,280 attempts | **11 of 19 milestones** (`mine_obsidian`) |
+| Full-route completions | **none** |
+| Dropped straight into the End | dragon killed in **4 of 4 worlds**, 92–126 of 160 flies each, fastest **23 ticks** |
+| Hand-written reference route | completes in **457 ticks** |
+
+So: the flies learn to chop wood, craft a bench, work up the whole pickaxe
+tech-tree and mine obsidian, and they can fight and kill the Ender Dragon when
+they start next to it. What they cannot do is chain all nineteen steps in one
+continuous life — the hand-written route does that in 457 ticks and they do not
+get close. The videos say so on screen.
+
+Training is chunked and resumable (`--resume`), because a detached run does not
+survive this environment going idle.
+
 ## Data
 
 `gs://flyem-male-cns/v1.0/connectome-data/flat-connectome` — public release

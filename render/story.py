@@ -49,6 +49,7 @@ def stats(run_dir: Path = OUT) -> dict:
         "history": hist,
         "best": best,
         "attempts": show["agents"],
+        "total_attempts": show["agents"] * max(len(show.get("all", [])), 1),
         "final_best_ms": max(h["best_progress"] for h in hist),
         "final_mean_ms": hist[-1]["mean_progress"],
         "won": bool(best["won"]),
@@ -76,7 +77,7 @@ def _result_lines(s: dict, small: bool = False):
         head = [("DE UNA SENTADA, HASTA AQUÍ", a, ACC),
                 (s["milestone"].replace("_", " "), int(a * 1.5), TITLE_COL),
                 (f"{s['best']['progress']} de {N_MILESTONES} hitos  ·  "
-                 f"{s['attempts']} intentos", b, ui.DIM)]
+                 f"{s['total_attempts']:,} intentos".replace(",", "."), b, ui.DIM)]
     tail = []
     eg = s.get("endgame")
     if eg and s["endgame_won"]:
@@ -190,7 +191,7 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
 
     # 9. many attempts at once, then the best of them
     card(w, fmt, [("Y AHORA, A INTENTARLO", 60, ACC),
-                  (f"{s['attempts']} copias de la misma mosca.", 42, TITLE_COL),
+                  (f"{s['attempts']} copias de la misma mosca, en 8 mundos.", 40, TITLE_COL),
                   ("Mismo genoma, mismas sinapsis.", 42, TITLE_COL),
                   ("Lo único que las separa es el ruido neuronal.", 38, ui.DIM)], 6.0)
     population_scene(w, fmt, np.repeat(best_genome[None, :], 77, axis=0),
