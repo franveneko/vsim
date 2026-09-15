@@ -192,16 +192,40 @@ class Evolution:
         self.history.append(st)
         return st
 
-    def run(self, generations: int, log_path: Path | None = None) -> None:
-        for g in range(generations):
+    def run(self, generations: int, log_path: Path | None = None,
+            start: int = 0) -> None:
+        for g in range(start, start + generations):
             st = self.step_generation(g)
             print(f"gen {st.gen:3d}  best {st.best_fitness:7.3f}  mean {st.mean_fitness:7.3f}"
                   f"  stage {st.best_milestone:16s} mean_ms {st.mean_progress:5.2f}"
                   f"  full-run wins {st.wins:3d}  dragons {st.dragon_kills:3d}"
                   f"  sigma {self.sigma:.3f}  {st.elapsed:5.1f}s",
                   flush=True)
-            if log_path and (g % 5 == 0 or g == generations - 1):
+            if log_path and (g % 5 == 0 or g == start + generations - 1):
                 self.save(log_path)
+
+    def resume(self, path: Path) -> int:
+        """Reload a checkpoint and return the generation to continue from.
+
+        Long runs cannot rely on staying alive between wake-ups, so training is
+        done in chunks that pick up exactly where the last one stopped.
+        """
+        npz, meta = path.with_suffix(".npz"), path.with_suffix(".json")
+        if not (npz.exists() and meta.exists()):
+            return 0
+        z = np.load(npz)
+        self.genomes = z["genomes"].astype(np.float32)
+        self.best_genome = z["best_genome"].astype(np.float32)
+        self.gen_best = [g for g in z["gen_best"].astype(np.float32)]
+        self.snapshots = {int(g): z["snapshots"][i].astype(np.float32)
+                          for i, g in enumerate(z["snapshot_gens"])}
+        blob = json.loads(meta.read_text())
+        self.history = [GenStats(**h) for h in blob["history"]]
+        self.best_fitness = blob.get("best_fitness", -1e9)
+        done = len(self.history)
+        self.sigma = max(self.sigma_min, self.sigma * self.sigma_decay ** done)
+        print(f"resuming from generation {done} (sigma {self.sigma:.3f})", flush=True)
+        return done
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,6 +253,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--world-every", type=int, default=3)
+    ap.add_argument("--resume", action="store_true",
+                    help="continue from the checkpoint in --out")
     ap.add_argument("--out", type=str, default=str(OUT / "evolution"))
     a = ap.parse_args()
     ev = Evolution(pop_size=a.pop, episode=a.episode, seed=a.seed, workers=a.workers,
@@ -236,7 +262,8 @@ def main() -> None:
     print(ev.conn.summary())
     print(f"genome: {ev.brain.genome_size} free parameters per fly; "
           f"{ev.brain.n_plastic} plastic KC->MBON synapses")
-    ev.run(a.generations, Path(a.out))
+    start = ev.resume(Path(a.out)) if a.resume else 0
+    ev.run(a.generations, Path(a.out), start=start)
     ev.save(Path(a.out))
 
 
