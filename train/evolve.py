@@ -137,7 +137,22 @@ class Evolution:
         chunks = [(genomes[i * self.chunk:(i + 1) * self.chunk], world_seed,
                    self.segments) for i in range(self.workers)]
         parts = self.pool.map(worker.evaluate, chunks)
-        return tuple(np.concatenate([p[j] for p in parts]) for j in range(5))
+        per_seg = np.concatenate([p[0] for p in parts], axis=1)   # (n_seg, P)
+        rest = tuple(np.concatenate([p[j] for p in parts]) for j in range(1, 5))
+        weights = np.array([w for _, _, w in self.segments], np.float32)
+        fitness = (self._rank(per_seg) * weights[:, None]).sum(axis=0)
+        self.raw_fitness = per_seg
+        return (fitness,) + rest
+
+    @staticmethod
+    def _rank(x: np.ndarray) -> np.ndarray:
+        """Map each row to evenly spaced ranks in [-0.5, 0.5].
+
+        Selection then depends on the *order* a segment puts the population in,
+        not on how many points that segment happens to hand out.
+        """
+        order = np.argsort(np.argsort(x, axis=1), axis=1).astype(np.float32)
+        return order / max(x.shape[1] - 1, 1) - 0.5
 
     def step_generation(self, gen: int) -> GenStats:
         t0 = time.time()
@@ -180,7 +195,7 @@ class Evolution:
     def run(self, generations: int, log_path: Path | None = None) -> None:
         for g in range(generations):
             st = self.step_generation(g)
-            print(f"gen {st.gen:3d}  best {st.best_fitness:8.1f}  mean {st.mean_fitness:8.1f}"
+            print(f"gen {st.gen:3d}  best {st.best_fitness:7.3f}  mean {st.mean_fitness:7.3f}"
                   f"  stage {st.best_milestone:16s} mean_ms {st.mean_progress:5.2f}"
                   f"  full-run wins {st.wins:3d}  dragons {st.dragon_kills:3d}"
                   f"  sigma {self.sigma:.3f}  {st.elapsed:5.1f}s",

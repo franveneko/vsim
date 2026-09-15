@@ -20,8 +20,10 @@ from minesim.world import MineSim
 _STATE: dict = {}
 
 # (start milestone, ticks, weight)
-DEFAULT_SEGMENTS = ((0, 1100, 1.2), (5, 200, 0.7), (9, 200, 0.7),
-                    (13, 200, 0.7), (17, 200, 0.9))
+# The full run is the objective; the rest are practice, and with rank-normalised
+# fitness these weights mean what they say.
+DEFAULT_SEGMENTS = ((0, 900, 2.0), (4, 180, 0.6), (9, 180, 0.6),
+                    (13, 180, 0.6), (17, 180, 0.6))
 
 
 def init(chunk: int, episode: int, seed: int) -> None:
@@ -30,7 +32,7 @@ def init(chunk: int, episode: int, seed: int) -> None:
     _STATE["brain"] = Population(conn, chunk, obs_dim=MineSim.OBS_DIM, seed=seed)
 
 
-def _run_segment(genomes, world_seed, start_stage, ticks):
+def _run_segment(genomes, world_seed, start_stage, ticks, award_win: bool):
     env, brain = _STATE["env"], _STATE["brain"]
     env.max_ticks = ticks
     env.reset(seed=world_seed, start_stage=start_stage)
@@ -44,20 +46,28 @@ def _run_segment(genomes, world_seed, start_stage, ticks):
         if done.all():
             break
     win_ticks = env.ms_tick[:, -1]
-    fitness += np.where(env.won, 60.0 + 40.0 * (1.0 - win_ticks / max(ticks, 1)), 0.0)
+    if award_win:
+        fitness += np.where(env.won, 60.0 + 40.0 * (1.0 - win_ticks / max(ticks, 1)), 0.0)
     return fitness, env.progress().copy(), env.won.copy(), win_ticks.copy()
 
 
 def evaluate(args):
+    """Returns per-segment fitness, so the parent can normalise before summing.
+
+    Segments have wildly different reward scales - finishing the run is worth
+    a hundred points, chopping a tree is worth two - and left raw, one segment
+    decides the whole selection.  The parent ranks each segment separately.
+    """
     genomes, world_seed, segments = args
-    total = None
+    per_segment = []
     head = None
     dragon_kills = None
     for i, (stage, ticks, weight) in enumerate(segments):
-        f, prog, won, wt = _run_segment(genomes, world_seed + 31 * i, stage, ticks)
-        total = f * weight if total is None else total + f * weight
+        f, prog, won, wt = _run_segment(genomes, world_seed + 31 * i, stage, ticks,
+                                        award_win=(i == 0))
+        per_segment.append(f)
         if i == 0:
             head = (prog, won, wt)
         dragon_kills = won if dragon_kills is None else (dragon_kills | won)
     prog, won, wt = head
-    return total, prog, won, wt, dragon_kills
+    return np.stack(per_segment), prog, won, wt, dragon_kills

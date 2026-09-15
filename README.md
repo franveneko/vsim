@@ -66,6 +66,22 @@ The route is 19 ordered milestones, from `punch_wood` to `slay_dragon`. Every
 world is stored with a leading agent axis, so hundreds of worlds advance on every
 `step()`.
 
+Three of Minecraft's interfaces are collapsed on purpose, because they are menu
+problems rather than behaviour problems — the agent still decides *when*, the
+route decides *what*:
+
+- **crafting** applies the recipe the current milestone calls for, producing
+  missing planks or sticks first;
+- **placing** puts down the block that milestone needs, in the cell you face or
+  the nearest free one;
+- **mining** swings at the block you face, or at an adjacent one — preferring
+  what the milestone needs — if the faced cell is not breakable.
+
+One balance number is worth stating because it decides whether anything can be
+learned at all: mobs attack on a 12-tick cooldown. At 20 ticks per second, a
+per-tick hit is over 30 damage a second, which makes standing still to craft
+instantly fatal and drowns out the rest of the problem.
+
 `minesim/scripted.py` is a hand-written speedrunner used as a reference: it
 proves the world is completable and gives the evolved flies a benchmark.
 

@@ -112,9 +112,15 @@ def _checkpoint_table():
 
 
 ZOMBIE, CREEPER, BLAZE, DRAGON = 0, 1, 2, 3
+MOB_COOLDOWN = 12            # ticks between a mob's attacks
+MAX_HP = 20.0                # ten hearts, as in the game
 COMBAT_STAGES = np.array([MILESTONES.index("blaze_rods"),
                           MILESTONES.index("ender_pearls"),
                           MILESTONES.index("slay_dragon")])
+# which mob each combat milestone is actually about
+COMBAT_TARGET = {MILESTONES.index("blaze_rods"): 4,
+                 MILESTONES.index("ender_pearls"): 3,
+                 MILESTONES.index("slay_dragon"): 5}
 N_MOBS = 6
 
 
@@ -140,6 +146,8 @@ class MineSim:
         self.reset()
 
     # ------------------------------------------------------------- generation
+    _spawn_xy = (np.zeros(1, int), np.zeros(1, int))
+
     def _generate(self, who: np.ndarray) -> None:
         if not CHECKPOINTS:
             CHECKPOINTS.update(_checkpoint_table())
@@ -175,13 +183,18 @@ class MineSim:
 
         # --- nether: netherrack, lava, a blaze spawner ----------------------
         roll = rng.random((k, S, S))
-        nz = np.where(roll < 0.18, LAVA,
-                      np.where(roll < 0.45, NETHERRACK, AIR)).astype(np.uint8)
+        nz = np.where(roll < 0.12, LAVA,
+                      np.where(roll < 0.40, NETHERRACK, AIR)).astype(np.uint8)
         nz[:, 1:4, 1:4] = AIR
         nz[:, 1, 1] = PORTAL                       # return portal
-        sx = rng.integers(S - 10, S - 2, k)
-        sy = rng.integers(S - 10, S - 2, k)
-        nz[np.arange(k), sy, sx] = SPAWNER
+        # a cleared fortress chamber, so the blaze has somewhere to stand and the
+        # player has somewhere to fight it
+        sx = rng.integers(S - 9, S - 4, k)
+        sy = rng.integers(S - 9, S - 4, k)
+        for j in range(k):
+            nz[j, sy[j] - 3:sy[j] + 4, sx[j] - 3:sx[j] + 4] = AIR
+            nz[j, sy[j], sx[j]] = SPAWNER
+        self._spawn_xy = (sx, sy)
         nz[:, 0, :] = nz[:, -1, :] = nz[:, :, 0] = nz[:, :, -1] = BEDROCK
 
         # --- the end: end stone island, dragon ------------------------------
@@ -201,6 +214,11 @@ class MineSim:
                                           (who.size, N_MOBS)).astype(np.int16)
         self.mob_y[who] = np.broadcast_to(rng.integers(2, S - 2, (k, N_MOBS)),
                                           (who.size, N_MOBS)).astype(np.int16)
+        # the nether pair lives in the fortress chamber
+        sx, sy = self._spawn_xy
+        for mob, (dx_, dy_) in ((3, (-2, 0)), (4, (2, 0))):
+            self.mob_x[who, mob] = np.broadcast_to(sx + dx_, (who.size,)).astype(np.int16)
+            self.mob_y[who, mob] = np.broadcast_to(sy + dy_, (who.size,)).astype(np.int16)
         self.mob_kind[who] = ZOMBIE
         self.mob_kind[who[:, None], np.array([2])[None, :]] = CREEPER
         self.mob_kind[who[:, None], np.array([4])[None, :]] = BLAZE
@@ -227,7 +245,7 @@ class MineSim:
             self.x = np.zeros(n, np.int16); self.y = np.zeros(n, np.int16)
             self.face = np.zeros(n, np.int8)
             self.dim = np.zeros(n, np.int8)
-            self.hp = np.full(n, 10.0, np.float32)
+            self.hp = np.full(n, MAX_HP, np.float32)
             self.inv = np.zeros((n, N_ITEMS), np.int32)
             self.tier = np.zeros(n, np.int8)
             self.done_ms = np.zeros((n, N_MILESTONES), bool)
@@ -263,6 +281,9 @@ class MineSim:
         self.dim[who] = cp["dim"]
         for item, count in cp["items"].items():
             self.inv[who, ITEM_IX[item]] = count
+        # a run that has already lit the portal starts with one standing
+        if stage > MILESTONES.index("light_portal"):
+            self.grid[OVERWORLD, who, self.SIZE // 2, self.SIZE // 2] = PORTAL
         if cp["dim"] != OVERWORLD:
             self.x[who], self.y[who] = 3, 3
             self.grid[cp["dim"], who, 3, 3] = AIR
@@ -317,13 +338,17 @@ class MineSim:
         gy, gx = np.divmod(flat, S)
         gx, gy = gx.astype(np.int16), gy.astype(np.int16)
 
-        # combat stages chase a mob instead of a block
-        fight = np.isin(self.stage(), COMBAT_STAGES)
-        if fight.any():
-            mdx, mdy, md, _kind, _k = self._nearest_mob()
-            gx = np.where(fight, self.x + mdx.astype(np.int16), gx)
-            gy = np.where(fight, self.y + mdy.astype(np.int16), gy)
-            d = np.where(fight & (md < 900), md, d)
+        # combat stages chase the specific mob that drops what the route needs
+        st = self.stage()
+        for stage_ix, mob in COMBAT_TARGET.items():
+            fight = (st == stage_ix) & (self.mob_hp[:, mob] > 0)
+            if not fight.any():
+                continue
+            gx = np.where(fight, self.mob_x[:, mob], gx)
+            gy = np.where(fight, self.mob_y[:, mob], gy)
+            dd = (np.abs(self.mob_x[:, mob] - self.x)
+                  + np.abs(self.mob_y[:, mob] - self.y)).astype(np.float32)
+            d = np.where(fight, dd, d)
 
         unreachable = d > 5000
         d = np.where(unreachable, 40.0, d)
@@ -394,7 +419,7 @@ class MineSim:
         out[20] = self.stage() / N_MILESTONES
         for j, item in enumerate(("log", "cobble", "iron", "diamond")):
             out[21 + j] = np.clip(self.inv[:, ITEM_IX[item]] / 4.0, 0, 1)
-        out[25] = self.hp / 10.0
+        out[25] = self.hp / MAX_HP
         for d in range(3):
             out[26 + d] = self.dim == d
         out[29] = self.mine_prog / 10.0
@@ -427,7 +452,8 @@ class MineSim:
         can = mv & WALKABLE[target]
         self.x = np.where(can, nx, self.x).astype(np.int16)
         self.y = np.where(can, ny, self.y).astype(np.int16)
-        self.mine_prog = np.where(mv, 0, self.mine_prog).astype(np.int16)
+        # Walking away abandons a half-mined block; bumping into one does not.
+        self.mine_prog = np.where(can, 0, self.mine_prog).astype(np.int16)
 
         # stepping into a portal changes dimension
         standing = self.grid[self.dim, rows, self.y, self.x]
@@ -444,11 +470,30 @@ class MineSim:
             self.grid[self.dim[i], i, 3, 3] = AIR
 
         # ---- mining ---------------------------------------------------------
+        # You swing at the block you face.  If that is not something you can
+        # break, the swing goes to an adjacent block instead, preferring the one
+        # the current milestone needs - which of four neighbours to hit is a menu
+        # problem, not a behaviour problem.
         mine = actions == 4
         fx = np.clip(self.x + DX[self.face], 0, S - 1)
         fy = np.clip(self.y + DY[self.face], 0, S - 1)
         block = self.grid[self.dim, rows, fy, fx]
-        ok = mine & SOLID[block] & (self.tier >= TIER_REQ[block])
+        breakable = SOLID[block] & (self.tier >= TIER_REQ[block])
+        want = self._goal_block()
+        for prefer in (True, False):
+            for d in range(4):
+                ax = np.clip(self.x + DX[d], 0, S - 1)
+                ay = np.clip(self.y + DY[d], 0, S - 1)
+                ab = self.grid[self.dim, rows, ay, ax]
+                alt = SOLID[ab] & (self.tier >= TIER_REQ[ab])
+                if prefer:
+                    alt &= ab == want
+                alt &= ~breakable
+                fx = np.where(alt, ax, fx)
+                fy = np.where(alt, ay, fy)
+                block = np.where(alt, ab, block)
+                breakable = breakable | alt
+        ok = mine & breakable
         key = (fy.astype(np.int32) * S + fx).astype(np.int32)
         restart = ok & (self.mine_target != key)
         self.mine_prog = np.where(restart, 0, self.mine_prog).astype(np.int16)
@@ -536,9 +581,9 @@ class MineSim:
 
         # ---- hazards --------------------------------------------------------
         here = self.grid[self.dim, rows, self.y, self.x]
-        self.hp -= np.where(live & HAZARD[here], 4.0, 0.0)
+        self.hp -= np.where(live & HAZARD[here], 8.0, 0.0)
         self.hp -= np.where(live & (self.dim == NETHER), 0.004, 0.0)
-        self.hp = np.minimum(self.hp + 0.01 * live, 10.0)      # slow regeneration
+        self.hp = np.minimum(self.hp + 0.02 * live, MAX_HP)    # slow regeneration
 
         # ---- milestones and shaping ----------------------------------------
         reward += self._update_milestones()
@@ -618,9 +663,13 @@ class MineSim:
         self.mob_x = np.where(free, nx, self.mob_x).astype(np.int16)
         self.mob_y = np.where(free, ny, self.mob_y).astype(np.int16)
 
-        touching = same & (np.abs(self.x[:, None] - self.mob_x)
-                           + np.abs(self.y[:, None] - self.mob_y) <= 1)
-        power = np.array([0.5, 1.6, 0.9, 1.2], np.float32)[self.mob_kind]
+        # Mobs hit on a cooldown rather than every tick.  At 20 ticks per second
+        # a per-tick hit is 30+ damage a second, which makes standing still to
+        # craft instantly fatal and drowns out everything there is to learn.
+        swing = (self.tick[:, None] % MOB_COOLDOWN) == 0
+        touching = same & swing & (np.abs(self.x[:, None] - self.mob_x)
+                                   + np.abs(self.y[:, None] - self.mob_y) <= 1)
+        power = np.array([2.0, 5.0, 3.0, 4.0], np.float32)[self.mob_kind]
         self.hp -= (touching * power).sum(axis=1) * live
 
     # -------------------------------------------------------------- milestones
