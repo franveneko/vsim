@@ -52,8 +52,10 @@ def make(genome: np.ndarray, n_agents: int, ticks: int, world_seed: int,
 
 
 def run(genome: np.ndarray, n_agents: int, ticks: int, world_seed: int,
-        brain_seed: int = 0, on_step=None):
+        brain_seed: int = 0, on_step=None, start_stage: int = 0):
     env, brain = make(genome, n_agents, ticks, world_seed, brain_seed)
+    if start_stage:
+        env.reset(seed=world_seed, start_stage=start_stage)
     for t in range(ticks):
         actions = np.argmax(brain.step(env.observe(), env.bearing()), axis=0)
         _, done = env.step(actions)
@@ -73,11 +75,11 @@ def best_attempt(env: MineSim, world_seed: int) -> Attempt:
 
 
 def search(genome: np.ndarray, world_seeds, n_agents: int, ticks: int,
-           brain_seed: int = 0, verbose: bool = True):
+           brain_seed: int = 0, verbose: bool = True, start_stage: int = 0):
     """Try the fly on several worlds; return every attempt, best first."""
     found = []
     for ws in world_seeds:
-        env, _ = run(genome, n_agents, ticks, ws, brain_seed)
+        env, _ = run(genome, n_agents, ticks, ws, brain_seed, start_stage=start_stage)
         a = best_attempt(env, ws)
         found.append(a)
         if verbose:
@@ -149,11 +151,27 @@ def main() -> None:
     best = results[0]
     print(f"\nbest attempt: world {best.world_seed} agent {best.agent} "
           f"{best.milestone} ticks {best.ticks}")
+
+    # The same fly dropped straight into the End.  Reported separately and
+    # labelled as such: it is not a run from a standing start.
+    print("\nend fight, starting from the End portal:", flush=True)
+    stage = MILESTONES.index("slay_dragon")
+    end_seeds = [5500 + i for i in range(4)]
+    end_results = search(genome, end_seeds, a.agents, 320, start_stage=stage)
+    endgame = end_results[0]
+    kills = sum(r.won for r in end_results)
+    print(f"dragon down in {kills}/{len(end_results)} worlds; "
+          f"fastest {endgame.ticks} ticks")
+
     Path(a.out).write_text(json.dumps(
         {"best": best.__dict__,
          "champion_score": float(score.max()),
          "pool_size": int(len(pool)),
          "all": [r.__dict__ for r in results],
+         "endgame": endgame.__dict__,
+         "endgame_stage": stage,
+         "endgame_worlds_won": int(kills),
+         "endgame_worlds": len(end_results),
          "agents": a.agents, "ticks": a.ticks}, indent=1))
 
 

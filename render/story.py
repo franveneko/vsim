@@ -24,6 +24,9 @@ OUT = Path(__file__).resolve().parent.parent / "out"
 TITLE_COL = ui.INK
 ACC = ui.ACCENT
 
+# The hand-written route's best time, measured by minesim.scripted.
+SCRIPTED_REFERENCE = 457
+
 
 def champion(genomes_path: Path, z) -> np.ndarray:
     """The genome the showcase selected, falling back to the training best."""
@@ -54,18 +57,34 @@ def stats(run_dir: Path = OUT) -> dict:
                       else MILESTONES[min(best["progress"], N_MILESTONES - 1)]),
         "world_seed": int(best["world_seed"]),
         "agent": int(best["agent"]),
+        "scripted_ticks": SCRIPTED_REFERENCE,
+        "endgame": show.get("endgame"),
+        "endgame_stage": show.get("endgame_stage", N_MILESTONES - 1),
+        "endgame_won": show.get("endgame_worlds_won", 0),
+        "endgame_worlds": show.get("endgame_worlds", 0),
     }
 
 
 def _result_lines(s: dict, small: bool = False):
-    a, b = (58, 34) if not small else (70, 40)
+    """The result, stated exactly as it came out - including the part that did
+    not work."""
+    a, b = (54, 30) if not small else (60, 34)
     if s["won"]:
-        return [("EL DRAGÓN CAE", a, ACC),
-                (ui.format_time(s["ticks"]), int(a * 1.6), TITLE_COL),
-                (f"{s['attempts']} intentos en paralelo", b, ui.DIM)]
-    return [("HASTA DÓNDE LLEGÓ", a, ACC),
-            (s["milestone"].replace("_", " "), int(a * 1.2), TITLE_COL),
-            (f"{s['best']['progress']} de {N_MILESTONES} hitos", b, ui.DIM)]
+        head = [("EL DRAGÓN CAE, DE UNA SENTADA", a, ACC),
+                (ui.format_time(s["ticks"]), int(a * 1.7), TITLE_COL)]
+    else:
+        head = [("DE UNA SENTADA, HASTA AQUÍ", a, ACC),
+                (s["milestone"].replace("_", " "), int(a * 1.5), TITLE_COL),
+                (f"{s['best']['progress']} de {N_MILESTONES} hitos  ·  "
+                 f"{s['attempts']} intentos", b, ui.DIM)]
+    tail = []
+    eg = s.get("endgame")
+    if eg and s["endgame_won"]:
+        tail = [("", 18, TITLE_COL),
+                ("PERO PUESTA EN EL END", a, ui.WARN),
+                ("mata al dragón", int(a * 1.3), TITLE_COL),
+                (f"en {s['endgame_won']} de {s['endgame_worlds']} mundos", b, ui.DIM)]
+    return head + tail
 
 
 # ------------------------------------------------------------------- YouTube
@@ -193,15 +212,22 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
                          (800, 920, "Obsidiana: el portal."),
                          (1050, 1180, "El Nether.")])
 
-    # 9b. slow motion on the closing seconds
-    if s["won"]:
-        card(w, fmt, [("A CÁMARA LENTA", 56, ACC),
-                      ("los últimos segundos", 40, TITLE_COL)], 3.0)
-        hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 1400,
-                   s["attempts"], stride=1, repeat=3,
-                   start_tick=max(0, s["ticks"] - 110), hold_end=2.0,
-                   title="REPETICIÓN", sub="x1/3 de velocidad",
-                   captions=[(0, 2000, "El cuerpo pedunculado sigue reajustando sus "
+    # 9b. the part that does work: the End fight, started at the End
+    eg = s.get("endgame")
+    if eg:
+        card(w, fmt, [("Y AHORA LA TRAMPA HONESTA", 52, ui.WARN),
+                      ("Esa carrera no llega al final.", 40, TITLE_COL),
+                      ("", 14, TITLE_COL),
+                      ("Pero si dejamos a la misma mosca directamente", 38, TITLE_COL),
+                      ("en el End, con el equipo puesto:", 38, TITLE_COL)], 6.5)
+        hero_scene(w, fmt, best_genome, int(eg["world_seed"]), int(eg["agent"]), 320,
+                   s["attempts"], stride=1, repeat=2, hold_end=2.5,
+                   start_stage=s["endgame_stage"],
+                   title="EL END", sub="arrancando desde el portal, no desde cero",
+                   hud_label="END FIGHT",
+                   captions=[(0, 90, "Sin la cadena de 19 pasos por delante, el circuito "
+                                     "de persecución y ataque sí funciona."),
+                             (90, 320, "El cuerpo pedunculado sigue reajustando sus "
                                        "sinapsis mientras pelea.")])
 
     # 10. result
@@ -211,12 +237,15 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
 
     # 11. the honest part
     card(w, fmt, [("LO QUE ESTO NO ES", 52, ui.WARN),
-                  ("No es Minecraft: es un sandbox con sus mecánicas.", 36, TITLE_COL),
-                  ("No es el conectoma entero: es su núcleo sensoriomotor.", 36, TITLE_COL),
-                  ("No son neuronas de espigas: son tasas de disparo.", 36, TITLE_COL),
+                  ("No es Minecraft: es un sandbox con sus mecánicas.", 34, TITLE_COL),
+                  ("No es el conectoma entero: es su núcleo sensoriomotor.", 34, TITLE_COL),
+                  ("No son neuronas de espigas: son tasas de disparo.", 34, TITLE_COL),
+                  ("Y no se lo pasan de una sentada: la ruta escrita", 34, TITLE_COL),
+                  (f"a mano tarda {ui.format_time(s['scripted_ticks'])}; ellas se quedan a medias.",
+                   34, TITLE_COL),
                   ("", 14, TITLE_COL),
-                  ("Lo que sí es real: el grafo, los signos,", 36, ACC),
-                  ("y el sitio donde ocurre el aprendizaje.", 36, ACC)], 9.0,
+                  ("Lo que sí es real: el grafo, los signos,", 34, ACC),
+                  ("y el sitio donde ocurre el aprendizaje.", 34, ACC)], 10.0,
          foot="código y datos: repositorio vsim")
     w.close()
     build_mod.ACTIVE_SUBS = None
@@ -252,11 +281,19 @@ def reels(genomes_path: Path, out: Path, s: dict) -> Path:
                      captions=[(0, 360, "Solo evoluciona cómo conectan sus sentidos con "
                                         "sus patas. El cableado no se toca.")])
     hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 1400, s["attempts"],
-               stride=3, hold_end=2.0, title="LA MEJOR CARRERA",
+               stride=3, hold_end=1.5, title="LA MEJOR CARRERA",
                sub=f"{s['attempts']} intentos en paralelo",
-               captions=[(0, 300, "La mejor de todas, a fondo."),
-                         (900, 1400, "Ruta Any%: 19 hitos.")])
-    card(w, fmt, _result_lines(s, small=True), 3.0, foot="repositorio: vsim")
+               captions=[(0, 300, "La mejor de todas: madera, piedra, hierro, diamante."),
+                         (900, 1400, "Se queda a medias de la ruta de 19 pasos.")])
+    eg = s.get("endgame")
+    if eg:
+        hero_scene(w, fmt, best_genome, int(eg["world_seed"]), int(eg["agent"]), 320,
+                   s["attempts"], stride=1, repeat=2, hold_end=2.0,
+                   start_stage=s["endgame_stage"], title="EL END",
+                   sub="arrancando desde el portal", hud_label="END FIGHT",
+                   captions=[(0, 320, "Pero puesta directamente en el End, con el equipo "
+                                      "puesto, sí mata al dragón.")])
+    card(w, fmt, _result_lines(s, small=True), 3.5, foot="repositorio: vsim")
     w.close()
     build_mod.ACTIVE_SUBS = None
     subs.write(out.with_suffix(".srt"))
@@ -278,11 +315,18 @@ def tiktok(genomes_path: Path, out: Path, s: dict) -> Path:
     population_scene(w, fmt, snaps[-1][:70], 4200, 300, "192 A LA VEZ",
                      "hasta que una se lo pasa", "PARALELO", stride=3,
                      captions=[(0, 300, "Cientos de copias intentándolo en paralelo.")])
-    hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 1400, s["attempts"],
-               stride=4, hold_end=1.5, title="LA MEJOR CARRERA",
+    hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 700, s["attempts"],
+               stride=4, hold_end=1.0, title="LA MEJOR CARRERA",
                sub="ruta Any%",
-               captions=[(0, 400, "17.966 neuronas medidas.")])
-    card(w, fmt, _result_lines(s, small=True), 2.5, foot="vsim")
+               captions=[(0, 700, "17.966 neuronas medidas, jugando.")])
+    eg = s.get("endgame")
+    if eg:
+        hero_scene(w, fmt, best_genome, int(eg["world_seed"]), int(eg["agent"]), 320,
+                   s["attempts"], stride=1, repeat=2, hold_end=1.5,
+                   start_stage=s["endgame_stage"], title="EL END",
+                   sub="arrancando desde el portal", hud_label="END FIGHT",
+                   captions=[(0, 320, "Puesta en el End, mata al dragón.")])
+    card(w, fmt, _result_lines(s, small=True), 3.0, foot="vsim")
     w.close()
     build_mod.ACTIVE_SUBS = None
     subs.write(out.with_suffix(".srt"))

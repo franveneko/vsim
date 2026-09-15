@@ -55,14 +55,14 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
                title: str = "", sub: str = "", brain_seed: int = 0,
                hold_end: float = 0.0, hud_label: str = "SPEEDRUN TIMER",
                start_tick: int = 0, subs: Subtitles | None = None,
-               repeat: int = 1) -> int:
+               repeat: int = 1, start_stage: int = 0) -> int:
     """Render one agent's run.  `stride` skips ticks to compress long runs."""
     conn = build_connectome()
     env = MineSim(n_agents, seed=world_seed, max_ticks=ticks)
     brain = Population(conn, n_agents, obs_dim=MineSim.OBS_DIM, seed=brain_seed)
     brain.reset()
     brain.set_genomes(np.repeat(genome[None, :], n_agents, axis=0))
-    env.reset(seed=world_seed)
+    env.reset(seed=world_seed, start_stage=start_stage)
 
     subs = subs or ACTIVE_SUBS
     written = 0
