@@ -54,7 +54,8 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
                agent: int, ticks: int, n_agents: int, captions=(), stride: int = 1,
                title: str = "", sub: str = "", brain_seed: int = 0,
                hold_end: float = 0.0, hud_label: str = "SPEEDRUN TIMER",
-               start_tick: int = 0, subs: Subtitles | None = None) -> int:
+               start_tick: int = 0, subs: Subtitles | None = None,
+               repeat: int = 1) -> int:
     """Render one agent's run.  `stride` skips ticks to compress long runs."""
     conn = build_connectome()
     env = MineSim(n_agents, seed=world_seed, max_ticks=ticks)
@@ -85,14 +86,43 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
         frame = ui.caption_over(frame, fmt.caption_box, text, fmt.caption_size)
         if subs is not None:
             subs.mark(writer.count, text)
-        writer.write(frame)
-        written += 1
+        writer.write(frame, repeat)
+        written += repeat
         if done.all() or env.won[agent]:
             break
     if frame is not None and hold_end:
         writer.write(frame, int(hold_end * FPS))
         written += int(hold_end * FPS)
     return written
+
+
+def scripted_scene(writer: VideoWriter, fmt: Format, world_seed: int, ticks: int,
+                   n_agents: int = 8, agent: int = 0, captions=(), stride: int = 1,
+                   title: str = "RUTA DE REFERENCIA", sub: str = "",
+                   subs: Subtitles | None = None) -> None:
+    """The hand-written speedrunner, for comparison."""
+    from minesim import scripted
+    subs = subs or ACTIVE_SUBS
+    env = MineSim(n_agents, seed=world_seed, max_ticks=ticks)
+    env.reset(seed=world_seed)
+    flat = {k: 0.0 for k in ("VPN", "KC", "MBON", "DAN", "CX", "DN")}
+    kc = np.zeros(1, np.float32)
+    for t in range(ticks):
+        _, done = env.step(scripted.act(env))
+        if t % stride:
+            continue
+        frame = fmt.hero(env, flat, kc, 1.0, agent, title,
+                         ui.format_time(int(env.tick[agent])), sub,
+                         hud_label="REFERENCE RUN",
+                         hud_sub=f"stage {env.stage()[agent] + 1}/{N_MILESTONES}  ·  "
+                                 f"{MILESTONES[min(env.stage()[agent], N_MILESTONES - 1)].replace('_', ' ')}")
+        text = caption_at(captions, t)
+        frame = ui.caption_over(frame, fmt.caption_box, text, fmt.caption_size)
+        if subs is not None:
+            subs.mark(writer.count, text)
+        writer.write(frame)
+        if done.all() or env.won[agent]:
+            break
 
 
 def population_scene(writer: VideoWriter, fmt: Format, genomes: np.ndarray,

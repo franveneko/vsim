@@ -15,7 +15,8 @@ from minesim.world import MILESTONES, N_MILESTONES
 from render import audio, ui
 from render import build as build_mod
 from render.build import (FPS, LANDSCAPE, PORTRAIT, card, chart_scene,
-                          connectome_frame, hero_scene, population_scene, still_scene)
+                          connectome_frame, hero_scene, population_scene,
+                          scripted_scene, still_scene)
 from render.video import Subtitles, VideoWriter
 
 OUT = Path(__file__).resolve().parent.parent / "out"
@@ -106,6 +107,15 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
               f"El signo de cada una sale de su neurotransmisor."),
     ])
 
+    # 3b. where learning lives
+    card(w, fmt, [("DÓNDE APRENDE UNA MOSCA", 52, ui.DIM),
+                  ("En el cuerpo pedunculado: 4.064 células de Kenyon", 38, TITLE_COL),
+                  ("que disparan de forma dispersa, 97 neuronas de salida,", 38, TITLE_COL),
+                  ("y 340 neuronas dopaminérgicas que dicen", 38, TITLE_COL),
+                  ("cuáles de esas sinapsis hay que debilitar.", 38, TITLE_COL),
+                  ("", 14, TITLE_COL),
+                  ("Ese circuito está aquí tal y como se midió.", 38, ACC)], 9.0)
+
     # 4. the sandbox
     card(w, fmt, [("EL PROBLEMA", 56, ui.DIM),
                   ("Minecraft de verdad no corre aquí:", 44, TITLE_COL),
@@ -118,6 +128,16 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
                                   "los tres mundos."),
                          (130, 260, "Y la condición de victoria de verdad: matar al Ender "
                                     "Dragon.")])
+
+    # 4b. what a route actually looks like, played by hand
+    card(w, fmt, [("LA RUTA, A MANO", 56, ui.DIM),
+                  ("Primero comprobamos que el mundo se puede pasar:", 38, TITLE_COL),
+                  ("una política escrita a mano, sin aprender nada.", 38, TITLE_COL)], 5.0)
+    scripted_scene(w, fmt, 4300, 700, stride=1,
+                   title="RUTA DE REFERENCIA", sub="política escrita a mano, sin cerebro",
+                   captions=[(0, 200, "Madera, banco, pico. Siempre en el mismo orden."),
+                             (200, 420, "Piedra, hierro, diamante, obsidiana."),
+                             (420, 700, "Nether, fortaleza, End. Este es el listón.")])
 
     # 5. generation zero
     population_scene(w, fmt, snaps[0][:77], 4200, 420,
@@ -149,10 +169,21 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
     # 8. the curve
     chart_scene(w, fmt, s["history"], 10.0, hold=2.5)
 
-    # 9. the run
+    # 9. many attempts at once, then the best of them
+    card(w, fmt, [("Y AHORA, A INTENTARLO", 60, ACC),
+                  (f"{s['attempts']} copias de la misma mosca.", 42, TITLE_COL),
+                  ("Mismo genoma, mismas sinapsis.", 42, TITLE_COL),
+                  ("Lo único que las separa es el ruido neuronal.", 38, ui.DIM)], 6.0)
+    population_scene(w, fmt, np.repeat(best_genome[None, :], 77, axis=0),
+                     s["world_seed"], 560,
+                     "LA MISMA MOSCA, 128 VECES", "el ruido las separa",
+                     "INTENTOS", stride=2,
+                     captions=[(0, 260, "Un cerebro real es ruidoso, y ese ruido basta "
+                                        "para que cada copia juegue distinto."),
+                               (260, 560, "Nos quedamos con la que llegue más lejos, "
+                                          "más rápido.")])
     card(w, fmt, [("LA MEJOR CARRERA", 64, ACC),
-                  (f"{s['attempts']} copias de la misma mosca,", 40, TITLE_COL),
-                  ("intentándolo a la vez.", 40, TITLE_COL)], 4.0)
+                  (f"mundo {s['world_seed']}, mosca #{s['agent']}", 40, TITLE_COL)], 3.5)
     hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 1400, s["attempts"],
                stride=1, hold_end=2.5,
                title="RUN FINAL", sub=f"mundo {s['world_seed']} · mosca #{s['agent']}",
@@ -161,6 +192,17 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
                          (500, 620, "Hierro, y luego diamante."),
                          (800, 920, "Obsidiana: el portal."),
                          (1050, 1180, "El Nether.")])
+
+    # 9b. slow motion on the closing seconds
+    if s["won"]:
+        card(w, fmt, [("A CÁMARA LENTA", 56, ACC),
+                      ("los últimos segundos", 40, TITLE_COL)], 3.0)
+        hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 1400,
+                   s["attempts"], stride=1, repeat=3,
+                   start_tick=max(0, s["ticks"] - 110), hold_end=2.0,
+                   title="REPETICIÓN", sub="x1/3 de velocidad",
+                   captions=[(0, 2000, "El cuerpo pedunculado sigue reajustando sus "
+                                       "sinapsis mientras pelea.")])
 
     # 10. result
     card(w, fmt, _result_lines(s), 5.0,
