@@ -67,6 +67,7 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
     subs = subs or ACTIVE_SUBS
     written = 0
     frame = None
+    dead_for = 0
     for t in range(ticks):
         actions = np.argmax(brain.step(env.observe(), env.bearing()), axis=0)
         _, done = env.step(actions)
@@ -88,7 +89,8 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
             subs.mark(writer.count, text)
         writer.write(frame, repeat)
         written += repeat
-        if done.all() or env.won[agent]:
+        dead_for = dead_for + 1 if not env.alive[agent] else 0
+        if done.all() or env.won[agent] or dead_for > 25:
             break
     if frame is not None and hold_end:
         writer.write(frame, int(hold_end * FPS))
