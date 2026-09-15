@@ -88,6 +88,38 @@ def search(genome: np.ndarray, world_seeds, n_agents: int, ticks: int,
     return sorted(found, key=lambda a: a.key())
 
 
+def score_candidates(candidates: np.ndarray, world_seeds, ticks: int,
+                     brain_seed: int = 0, verbose: bool = True) -> np.ndarray:
+    """Rank genomes by how far they get on the *full* route, averaged over worlds.
+
+    Training fitness mixes the full run with checkpoint practice, so the genome
+    with the best training score is not necessarily the best end-to-end runner.
+    This picks the one that actually plays the whole game.
+    """
+    conn = build()
+    n = candidates.shape[0]
+    env = MineSim(n, seed=world_seeds[0], max_ticks=ticks)
+    brain = Population(conn, n, obs_dim=MineSim.OBS_DIM, seed=brain_seed)
+    score = np.zeros(n, np.float64)
+    for ws in world_seeds:
+        env.max_ticks = ticks
+        env.reset(seed=ws)
+        brain.reset()
+        brain.set_genomes(candidates)
+        for _ in range(ticks):
+            actions = np.argmax(brain.step(env.observe(), env.bearing()), axis=0)
+            _, done = env.step(actions)
+            if done.all():
+                break
+        prog = env.progress().astype(np.float64)
+        speed = np.where(env.won, 1.0 - env.ms_tick[:, -1] / ticks, 0.0)
+        score += prog + 5.0 * speed
+        if verbose:
+            print(f"  world {ws}: best {int(prog.max())} milestones, "
+                  f"{int(env.won.sum())} completions", flush=True)
+    return score / len(world_seeds)
+
+
 def main() -> None:
     import argparse
     ap = argparse.ArgumentParser()
@@ -96,8 +128,22 @@ def main() -> None:
     ap.add_argument("--ticks", type=int, default=1400)
     ap.add_argument("--worlds", type=int, default=8)
     ap.add_argument("--out", default=str(OUT / "showcase.json"))
+    ap.add_argument("--select-worlds", type=int, default=3)
+    ap.add_argument("--select-ticks", type=int, default=1400)
     a = ap.parse_args()
-    genome = np.load(a.genomes)["best_genome"]
+
+    z = np.load(a.genomes)
+    pool = np.concatenate([z["gen_best"], z["genomes"]], axis=0).astype(np.float32)
+    # de-duplicate: elites survive unchanged, so the pool repeats itself a lot
+    _, uniq = np.unique(np.round(pool, 4), axis=0, return_index=True)
+    pool = pool[np.sort(uniq)]
+    print(f"selecting a champion from {len(pool)} distinct genomes", flush=True)
+    score = score_candidates(pool, [7000 + i for i in range(a.select_worlds)],
+                             a.select_ticks)
+    genome = pool[int(np.argmax(score))]
+    print(f"champion score {score.max():.2f} "
+          f"(pool mean {score.mean():.2f}, runner-up {np.sort(score)[-2]:.2f})")
+    np.save(OUT / "champion.npy", genome)
     seeds = [4000 + i for i in range(a.worlds)]
     results = search(genome, seeds, a.agents, a.ticks)
     best = results[0]
@@ -105,6 +151,8 @@ def main() -> None:
           f"{best.milestone} ticks {best.ticks}")
     Path(a.out).write_text(json.dumps(
         {"best": best.__dict__,
+         "champion_score": float(score.max()),
+         "pool_size": int(len(pool)),
          "all": [r.__dict__ for r in results],
          "agents": a.agents, "ticks": a.ticks}, indent=1))
 

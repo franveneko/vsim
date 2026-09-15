@@ -13,14 +13,21 @@ import numpy as np
 
 from minesim.world import MILESTONES, N_MILESTONES
 from render import audio, build, layouts, ui
+from render import build as build_mod
 from render.build import (FPS, LANDSCAPE, PORTRAIT, card, chart_scene,
                           connectome_frame, hero_scene, population_scene, still_scene)
-from render.video import VideoWriter, mux
+from render.video import Subtitles, VideoWriter, mux
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 
 TITLE_COL = ui.INK
 ACC = ui.ACCENT
+
+
+def champion(genomes_path: Path, z) -> np.ndarray:
+    """The genome the showcase selected, falling back to the training best."""
+    path = Path(genomes_path).with_name("champion.npy")
+    return np.load(path) if path.exists() else z["best_genome"]
 
 
 def stats(run_dir: Path = OUT) -> dict:
@@ -64,11 +71,12 @@ def _result_lines(s: dict, small: bool = False):
 def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
     fmt = LANDSCAPE
     z = np.load(genomes_path)
-    best_genome = z["best_genome"]
+    best_genome = champion(genomes_path, z)
     snaps = z["snapshots"]
     snap_gens = z["snapshot_gens"]
     silent = out.with_name(out.stem + "_silent.mp4")
     w = VideoWriter(silent, fmt.size, FPS)
+    build_mod.ACTIVE_SUBS = subs = Subtitles(FPS)
 
     # 1. cold open
     hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 320, s["attempts"],
@@ -169,6 +177,8 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
                   ("y el sitio donde ocurre el aprendizaje.", 36, ACC)], 9.0,
          foot="código y datos: repositorio vsim")
     w.close()
+    build_mod.ACTIVE_SUBS = None
+    subs.write(out.with_suffix(".srt"))
     return silent
 
 
@@ -176,9 +186,10 @@ def youtube(genomes_path: Path, out: Path, s: dict) -> Path:
 def reels(genomes_path: Path, out: Path, s: dict) -> Path:
     fmt = PORTRAIT
     z = np.load(genomes_path)
-    best_genome, snaps = z["best_genome"], z["snapshots"]
+    best_genome, snaps = champion(genomes_path, z), z["snapshots"]
     silent = out.with_name(out.stem + "_silent.mp4")
     w = VideoWriter(silent, fmt.size, FPS)
+    build_mod.ACTIVE_SUBS = subs = Subtitles(FPS)
 
     hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 210, s["attempts"],
                stride=1, title="UNA MOSCA JUEGA A MINECRAFT",
@@ -205,15 +216,18 @@ def reels(genomes_path: Path, out: Path, s: dict) -> Path:
                          (900, 1400, "Ruta Any%: 19 hitos.")])
     card(w, fmt, _result_lines(s, small=True), 3.0, foot="repositorio: vsim")
     w.close()
+    build_mod.ACTIVE_SUBS = None
+    subs.write(out.with_suffix(".srt"))
     return silent
 
 
 def tiktok(genomes_path: Path, out: Path, s: dict) -> Path:
     fmt = PORTRAIT
     z = np.load(genomes_path)
-    best_genome, snaps = z["best_genome"], z["snapshots"]
+    best_genome, snaps = champion(genomes_path, z), z["snapshots"]
     silent = out.with_name(out.stem + "_silent.mp4")
     w = VideoWriter(silent, fmt.size, FPS)
+    build_mod.ACTIVE_SUBS = subs = Subtitles(FPS)
 
     hero_scene(w, fmt, best_genome, s["world_seed"], s["agent"], 120, s["attempts"],
                stride=1, title="CEREBRO DE MOSCA vs MINECRAFT",
@@ -228,6 +242,8 @@ def tiktok(genomes_path: Path, out: Path, s: dict) -> Path:
                captions=[(0, 400, "17.966 neuronas medidas.")])
     card(w, fmt, _result_lines(s, small=True), 2.5, foot="vsim")
     w.close()
+    build_mod.ACTIVE_SUBS = None
+    subs.write(out.with_suffix(".srt"))
     return silent
 
 

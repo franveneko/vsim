@@ -16,12 +16,13 @@ def _draw(img: np.ndarray):
     return pil, ImageDraw.Draw(pil)
 
 
-def _kc_raster(rates: np.ndarray, rows: int = 64) -> np.ndarray:
+def _kc_raster(rates: np.ndarray, rows: int = 64, cols: int | None = None) -> np.ndarray:
     """Kenyon-cell activity as a sparse-looking raster block."""
-    n = rows * rows
+    cols = cols or rows
+    n = rows * cols
     v = np.zeros(n, np.float32)
     v[:min(n, rates.size)] = rates[:n]
-    v = np.clip(v / (v.max() + 1e-6), 0, 1).reshape(rows, rows)
+    v = np.clip(v / (v.max() + 1e-6), 0, 1).reshape(rows, cols)
     col = np.array(ui.POP_COLOURS["KC"], np.float32)
     base = np.array((26, 28, 38), np.float32)
     return (base + (col - base) * v[..., None]).astype(np.uint8)
@@ -74,10 +75,10 @@ def hero_portrait(env: MineSim, rates: dict, kc: np.ndarray, mb_gain: float,
     d.rectangle((58, 208, 1022, 1172), outline=ui.PANEL_EDGE, width=2)
     scene.draw_hud(d, (60, 1200, 1020, 1340), env, agent, hud_label, hud_sub)
     ui.panel(d, (60, 1360, 1020, 1470))
-    ui.text(d, (80, 1376), "ANY% ROUTE", size=16, colour=ui.DIM)
-    scene.draw_route(d, (80, 1404, 1000, 1456), int(env.stage()[agent]), compact=True)
+    ui.text(d, (80, 1378), "ANY% ROUTE", size=16, colour=ui.DIM)
+    scene.draw_route(d, (80, 1402, 1000, 1452), int(env.stage()[agent]), compact=True)
     scene.draw_brain(d, pil, (60, 1494, 1020, 1880), rates,
-                     int((kc > 0).sum()), mb_gain, _kc_raster(kc))
+                     int((kc > 0).sum()), mb_gain, _kc_raster(kc, rows=22, cols=182))
     return np.asarray(pil).copy()
 
 

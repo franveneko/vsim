@@ -64,3 +64,37 @@ def probe(path: Path) -> str:
     out = subprocess.run(
         [FFMPEG, "-hide_banner", "-i", str(path)], capture_output=True, text=True)
     return out.stderr.strip()
+
+
+class Subtitles:
+    """Collects the on-screen caption per frame and writes an uploadable SRT."""
+
+    def __init__(self, fps: int = 30):
+        self.fps = fps
+        self.spans: list[list] = []
+
+    def mark(self, frame_index: int, text: str) -> None:
+        text = (text or "").strip()
+        if self.spans and self.spans[-1][2] == text and self.spans[-1][1] == frame_index:
+            self.spans[-1][1] = frame_index + 1
+            return
+        if text:
+            self.spans.append([frame_index, frame_index + 1, text])
+
+    @staticmethod
+    def _stamp(seconds: float) -> str:
+        ms = int(round(seconds * 1000))
+        h, ms = divmod(ms, 3_600_000)
+        m, ms = divmod(ms, 60_000)
+        s, ms = divmod(ms, 1000)
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+    def write(self, path: Path) -> Path:
+        path = Path(path)
+        lines = []
+        for i, (a, b, text) in enumerate(self.spans, 1):
+            lines += [str(i),
+                      f"{self._stamp(a / self.fps)} --> {self._stamp(b / self.fps)}",
+                      text, ""]
+        path.write_text("\n".join(lines), encoding="utf-8")
+        return path

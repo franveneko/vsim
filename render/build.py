@@ -16,10 +16,13 @@ from flybrain.connectome import build as build_connectome
 from flybrain.network import Population
 from minesim.world import MILESTONES, N_MILESTONES, MineSim
 from render import chart, layouts, ui
-from render.video import VideoWriter
+from render.video import Subtitles, VideoWriter
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 FPS = 30
+
+# A storyboard sets this so every scene logs its captions to the same SRT.
+ACTIVE_SUBS: Subtitles | None = None
 
 
 @dataclass
@@ -34,9 +37,9 @@ class Format:
 
 
 LANDSCAPE = Format("youtube", layouts.LANDSCAPE, layouts.hero_landscape,
-                   layouts.population_landscape, (40, 130, 1000, 1090), 30, (11, 7))
+                   layouts.population_landscape, (40, 130, 1000, 1076), 30, (11, 7))
 PORTRAIT = Format("portrait", layouts.PORTRAIT, layouts.hero_portrait,
-                  layouts.population_portrait, (60, 210, 1020, 1172), 34, (7, 10))
+                  layouts.population_portrait, (60, 210, 1020, 1168), 34, (7, 10))
 
 
 # --------------------------------------------------------------------- pieces
@@ -51,7 +54,7 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
                agent: int, ticks: int, n_agents: int, captions=(), stride: int = 1,
                title: str = "", sub: str = "", brain_seed: int = 0,
                hold_end: float = 0.0, hud_label: str = "SPEEDRUN TIMER",
-               start_tick: int = 0) -> int:
+               start_tick: int = 0, subs: Subtitles | None = None) -> int:
     """Render one agent's run.  `stride` skips ticks to compress long runs."""
     conn = build_connectome()
     env = MineSim(n_agents, seed=world_seed, max_ticks=ticks)
@@ -60,6 +63,7 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
     brain.set_genomes(np.repeat(genome[None, :], n_agents, axis=0))
     env.reset(seed=world_seed)
 
+    subs = subs or ACTIVE_SUBS
     written = 0
     frame = None
     for t in range(ticks):
@@ -77,8 +81,10 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
                          hud_label=hud_label,
                          hud_sub=f"stage {env.stage()[agent] + 1}/{N_MILESTONES}  ·  "
                                  f"{MILESTONES[min(env.stage()[agent], N_MILESTONES - 1)].replace('_', ' ')}")
-        frame = ui.caption_over(frame, fmt.caption_box, caption_at(captions, t),
-                                fmt.caption_size)
+        text = caption_at(captions, t)
+        frame = ui.caption_over(frame, fmt.caption_box, text, fmt.caption_size)
+        if subs is not None:
+            subs.mark(writer.count, text)
         writer.write(frame)
         written += 1
         if done.all() or env.won[agent]:
@@ -92,7 +98,7 @@ def hero_scene(writer: VideoWriter, fmt: Format, genome: np.ndarray, world_seed:
 def population_scene(writer: VideoWriter, fmt: Format, genomes: np.ndarray,
                      world_seed: int, ticks: int, title: str, sub: str,
                      right: str, captions=(), stride: int = 2,
-                     brain_seed: int = 0) -> None:
+                     brain_seed: int = 0, subs: Subtitles | None = None) -> None:
     conn = build_connectome()
     n = genomes.shape[0]
     env = MineSim(n, seed=world_seed, max_ticks=ticks)
@@ -100,6 +106,7 @@ def population_scene(writer: VideoWriter, fmt: Format, genomes: np.ndarray,
     brain.reset()
     brain.set_genomes(genomes)
     env.reset(seed=world_seed)
+    subs = subs or ACTIVE_SUBS
     cols, rows = fmt.grid
     for t in range(ticks):
         actions = np.argmax(brain.step(env.observe(), env.bearing()), axis=0)
@@ -115,8 +122,11 @@ def population_scene(writer: VideoWriter, fmt: Format, genomes: np.ndarray,
                  "",
                  f"clock     {ui.format_time(int(env.tick.max()))}"]
         frame = fmt.population(env, title, right, sub, cols=cols, rows=rows, stats=stats)
-        frame = ui.caption_over(frame, (0, 0, fmt.size[0], fmt.size[1]),
-                                caption_at(captions, t), fmt.caption_size)
+        text = caption_at(captions, t)
+        frame = ui.caption_over(frame, (0, 0, fmt.size[0], fmt.size[1] - 8), text,
+                                fmt.caption_size)
+        if subs is not None:
+            subs.mark(writer.count, text)
         writer.write(frame)
         if done.all():
             break
@@ -140,13 +150,18 @@ def card(writer: VideoWriter, fmt: Format, lines, seconds: float, foot: str = ""
 
 
 def still_scene(writer: VideoWriter, fmt: Format, frame: np.ndarray,
-                captions: list[tuple[float, str]]) -> None:
+                captions: list[tuple[float, str]],
+                subs: Subtitles | None = None) -> None:
     """Hold one image while a sequence of captions plays over it."""
+    subs = subs or ACTIVE_SUBS
     W, H = fmt.size
-    box = (0, 0, W, H - 40)
+    box = (0, 0, W, H - 24)
     for seconds, text in captions:
-        writer.write(ui.caption_over(frame, box, text, fmt.caption_size),
-                     int(seconds * FPS))
+        n = int(seconds * FPS)
+        if subs is not None:
+            for k in range(n):
+                subs.mark(writer.count + k, text)
+        writer.write(ui.caption_over(frame, box, text, fmt.caption_size), n)
 
 
 def connectome_frame(fmt: Format) -> np.ndarray:

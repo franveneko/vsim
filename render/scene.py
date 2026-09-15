@@ -51,23 +51,40 @@ def minimap(env: MineSim, agent: int, px: int) -> np.ndarray:
 
 
 # -------------------------------------------------------------------- panels
+def _step_colour(i: int, stage: int):
+    return ui.ACCENT if i < stage else (ui.WARN if i == stage else ui.DIM)
+
+
 def draw_route(draw, box, stage: int, *, compact: bool = False):
-    """The speedrun checklist, with the current step highlighted."""
+    """The speedrun checklist: a labelled column, or a row of pips when compact."""
     x0, y0, x1, y1 = box
     n = N_MILESTONES
+    if compact:
+        step = (x1 - x0) / n
+        r = min(step * 0.26, (y1 - y0) * 0.3)
+        cy = (y0 + y1) / 2
+        for i in range(n):
+            cx = x0 + step * (i + 0.5)
+            colour = _step_colour(i, stage)
+            draw.ellipse((cx - r, cy - r, cx + r, cy + r),
+                         fill=colour if i <= stage else None, outline=colour, width=2)
+            if i and i % 6 == 0:
+                draw.line((cx - step / 2, cy - r * 1.9, cx - step / 2, cy + r * 1.9),
+                          fill=ui.PANEL_EDGE, width=1)
+        ui.text(draw, (x1, y0 - 4),
+                MILESTONES[min(stage, n - 1)].replace("_", " "),
+                size=int((y1 - y0) * 0.42), kind="mono", colour=ui.WARN, anchor="rb")
+        return
     step = (y1 - y0) / n
     for i, name in enumerate(MILESTONES):
         y = y0 + i * step
-        done = i < stage
-        colour = ui.ACCENT if done else (ui.WARN if i == stage else ui.DIM)
+        colour = _step_colour(i, stage)
         r = step * 0.22
         cy = y + step / 2
         draw.ellipse((x0, cy - r, x0 + 2 * r, cy + r),
-                     fill=colour if done or i == stage else None,
-                     outline=colour, width=2)
-        if not compact:
-            ui.text(draw, (x0 + 2 * r + 10, cy), name.replace("_", " "),
-                    size=int(step * 0.62), kind="reg", colour=colour, anchor="lm")
+                     fill=colour if i <= stage else None, outline=colour, width=2)
+        ui.text(draw, (x0 + 2 * r + 10, cy), name.replace("_", " "),
+                size=int(step * 0.62), kind="reg", colour=colour, anchor="lm")
 
 
 def draw_brain(draw, pil, box, rates: dict, kc_active: int, mb_gain: float,
