@@ -151,6 +151,70 @@ get close. The videos say so on screen.
 Training is chunked and resumable (`--resume`), because a detached run does not
 survive this environment going idle.
 
+## Real Minecraft
+
+`mcreal/` + `live/` put the same brain in charge of a **real Minecraft bot over
+the real protocol** — no simulation of the game at all. `mcreal/bridge.js` is a
+[mineflayer](https://github.com/PrismarineJS/mineflayer) bot that translates the
+server's view into the same 32-number observation and the same eight actions the
+sandbox used, so a brain evolved in the fast sandbox drops straight into the real
+game without being retrained.
+
+```bash
+cd mcreal && npm install && cd ..
+python3 -m live.play --steps 200 --seed-trees 16        # bundled JS server
+python3 -m live.play --external-server --host 127.0.0.1 --port 25565 --auth microsoft
+```
+
+Nothing about the world, the physics, the block-breaking times or the inventory
+is ours in this mode: it is whatever the server says.
+
+### Pointing it at your own Minecraft
+
+This is the mode worth using, and it has to run **on your machine** — a cloud
+container cannot reach your computer.
+
+1. Clone this repo locally, `pip install -r requirements.txt`, `cd mcreal && npm install`.
+2. Start your own server (vanilla, Paper, or Open to LAN from a single-player
+   world) and note its port.
+3. Run the bot against it:
+
+```bash
+python3 -m live.play --external-server --host 127.0.0.1 --port 25565 \
+        --version 1.18.2 --auth microsoft --steps 2000
+```
+
+`--auth microsoft` signs in with your real account (needed for an online-mode
+server); `--auth offline` is enough for a LAN world. Match `--version` to your
+server.
+
+### What runs today, and what does not
+
+Verified against the bundled JavaScript server (flying-squid, Minecraft 1.18.2):
+
+| | |
+|---|---|
+| Real protocol, world, physics, block breaking, inventory, health | works |
+| The connectome driving it | works — 10 blocks broken in a 150-step run, 5 of them oak logs |
+| Milestones reached | `punch_wood` ✓, then stuck |
+
+It stops at the first craft because **flying-squid implements no recipes, no
+loot tables and no mob AI** — it is a protocol server, not the game. Everything
+past `craft_planks` needs Mojang's own server jar.
+
+This container cannot download it: the environment's network policy denies
+`piston-meta.mojang.com`, `piston-data.mojang.com` and `libraries.minecraft.net`.
+Allow those hosts in the environment's Network access setting and the whole
+route becomes available here; on your own machine the restriction does not exist.
+
+### Transfer, honestly
+
+The brain was evolved in a 2D sandbox and is being asked to drive a 3D game, so
+the mapping does real work: cardinal moves become look-and-walk, and mining is
+restricted to blocks that are in the way or that the milestone wants — in the
+sandbox the ground was floor you could not dig, and without that restriction the
+bot spends the run digging a hole. Behaviour transfers in outline, not in detail.
+
 ## Data
 
 `gs://flyem-male-cns/v1.0/connectome-data/flat-connectome` — public release

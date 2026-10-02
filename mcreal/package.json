@@ -1,0 +1,17 @@
+{
+  "name": "mcreal",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "flying-squid": "^1.12.0",
+    "minecraft-data": "^3.117.0",
+    "mineflayer": "^4.39.0"
+  }
+}
